@@ -1,0 +1,58 @@
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from keyboards import create_menu
+from menus import MENU
+from config import CHANNEL_ID, TEST_FILE_ID
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        MENU["main"]["title"],
+        reply_markup=create_menu("main")
+    )
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+
+    # اگر callback مربوط به یک منو باشد
+    if data in MENU:
+        await query.edit_message_text(
+            MENU[data]["title"],
+            reply_markup=create_menu(data)
+        )
+        return
+
+    # تست ارسال فایل
+    if data == "hf":
+        await context.bot.copy_message(
+            chat_id=query.message.chat.id,
+            from_chat_id=CHANNEL_ID,
+            message_id=TEST_FILE_ID
+        )
+        return
+
+    # دکمه بازگشت
+    if data == "back":
+        await query.edit_message_text(
+            MENU["main"]["title"],
+            reply_markup=create_menu("main")
+        )
+        return
+
+    # بقیه دکمه‌ها
+    await query.answer(
+        "🚧 این بخش هنوز تکمیل نشده.",
+        show_alert=True
+    )
+
+
+async def channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    post = update.channel_post
+
+    print("CHANNEL ID:", post.chat.id)
+    print("MESSAGE ID:", post.message_id)
