@@ -67,6 +67,7 @@ def init_db():
     conn.close()
 
 
+# ========================= USERS =========================
 def add_user(user_id, username, full_name):
     conn = connect()
     cur = conn.cursor()
@@ -78,6 +79,7 @@ def add_user(user_id, username, full_name):
     conn.close()
 
 
+# ========================= ADMINS =========================
 def is_admin(user_id):
     conn = connect()
     cur = conn.cursor()
@@ -95,6 +97,7 @@ def add_admin(user_id):
     conn.close()
 
 
+# ========================= MENUS =========================
 def add_menu(title, callback_key, parent_id=None, is_paid=0, price=0):
     conn = connect()
     cur = conn.cursor()
@@ -145,19 +148,23 @@ def get_root_menus():
     return rows
 
 
-def get_all_menus():
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT title, callback_key FROM menus")
-    rows = cur.fetchall()
-    conn.close()
-    return rows
-
-
 def delete_menu(callback_key):
+    """حذف منو و تمام زیرمنوهایش (به صورت آبشاری)"""
     conn = connect()
     cur = conn.cursor()
-    cur.execute("DELETE FROM menus WHERE callback_key=?", (callback_key,))
+    
+    # اول خود منو رو پیدا کن
+    cur.execute("SELECT id FROM menus WHERE callback_key=?", (callback_key,))
+    row = cur.fetchone()
+    if row:
+        menu_id = row[0]
+        # حذف تمام زیرمنوها (با parent_id = menu_id)
+        cur.execute("DELETE FROM menus WHERE parent_id=?", (menu_id,))
+        # حذف خود منو
+        cur.execute("DELETE FROM menus WHERE id=?", (menu_id,))
+        # حذف فایل‌های متصل به این منو (اختیاری)
+        cur.execute("DELETE FROM content_files WHERE menu_id=?", (menu_id,))
+    
     conn.commit()
     conn.close()
 
@@ -165,15 +172,24 @@ def delete_menu(callback_key):
 def set_menu_price(menu_id, price):
     conn = connect()
     cur = conn.cursor()
-    cur.execute("""
-    UPDATE menus
-    SET is_paid=1, price=?
-    WHERE id=?
-    """, (price, menu_id))
+    if price == 0:
+        # اگر قیمت صفر باشه، منو رو رایگان کن
+        cur.execute("""
+        UPDATE menus
+        SET is_paid=0, price=0
+        WHERE id=?
+        """, (menu_id,))
+    else:
+        cur.execute("""
+        UPDATE menus
+        SET is_paid=1, price=?
+        WHERE id=?
+        """, (price, menu_id))
     conn.commit()
     conn.close()
 
 
+# ========================= CONTENT =========================
 def add_content(menu_id, channel_id, message_id, caption=""):
     conn = connect()
     cur = conn.cursor()
@@ -199,6 +215,7 @@ def get_content(menu_id):
     return row
 
 
+# ========================= PAYMENTS =========================
 def add_payment(user_id, menu_id, amount):
     conn = connect()
     cur = conn.cursor()
