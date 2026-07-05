@@ -3,249 +3,184 @@ from datetime import datetime
 
 DB_NAME = "bot.db"
 
-
-def connect():
+def get_db():
     return sqlite3.connect(DB_NAME)
 
-
 def init_db():
-    conn = connect()
-    cur = conn.cursor()
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users (
+    conn = get_db()
+    c = conn.cursor()
+    
+    # users
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER UNIQUE,
         username TEXT,
         full_name TEXT,
         joined_at TEXT
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS admins (
+    )''')
+    
+    # admins
+    c.execute('''CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER UNIQUE
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS menus (
+    )''')
+    
+    # menus
+    c.execute('''CREATE TABLE IF NOT EXISTS menus (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         callback_key TEXT UNIQUE,
         parent_id INTEGER,
         is_paid INTEGER DEFAULT 0,
         price INTEGER DEFAULT 0
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS content_files (
+    )''')
+    
+    # content_files
+    c.execute('''CREATE TABLE IF NOT EXISTS content_files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         menu_id INTEGER NOT NULL,
         channel_id INTEGER NOT NULL,
         message_id INTEGER NOT NULL,
         caption TEXT,
-        created_at TEXT,
-        is_active INTEGER DEFAULT 1
-    )
-    """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS payments (
+        created_at TEXT
+    )''')
+    
+    # payments
+    c.execute('''CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
         menu_id INTEGER NOT NULL,
         amount INTEGER NOT NULL,
         status TEXT DEFAULT 'pending',
         created_at TEXT
-    )
-    """)
-
+    )''')
+    
     conn.commit()
     conn.close()
 
-
-# ========================= USERS =========================
+# ========== USERS ==========
 def add_user(user_id, username, full_name):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    INSERT OR IGNORE INTO users (user_id, username, full_name, joined_at)
-    VALUES (?, ?, ?, ?)
-    """, (user_id, username, full_name, datetime.now().isoformat()))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO users (user_id, username, full_name, joined_at) VALUES (?,?,?,?)",
+              (user_id, username, full_name, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
-
-# ========================= ADMINS =========================
+# ========== ADMINS ==========
 def is_admin(user_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM admins WHERE user_id=?", (user_id,))
-    res = cur.fetchone()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM admins WHERE user_id=?", (user_id,))
+    res = c.fetchone()
     conn.close()
     return res is not None
 
-
 def add_admin(user_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
     conn.commit()
     conn.close()
 
-
-# ========================= MENUS =========================
+# ========== MENUS ==========
 def add_menu(title, callback_key, parent_id=None, is_paid=0, price=0):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    INSERT INTO menus (title, callback_key, parent_id, is_paid, price)
-    VALUES (?, ?, ?, ?, ?)
-    """, (title, callback_key, parent_id, is_paid, price))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO menus (title, callback_key, parent_id, is_paid, price) VALUES (?,?,?,?,?)",
+              (title, callback_key, parent_id, is_paid, price))
     conn.commit()
     conn.close()
-
 
 def get_menu(callback_key):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT id, title, is_paid, price
-    FROM menus
-    WHERE callback_key=?
-    """, (callback_key,))
-    row = cur.fetchone()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT id, title, is_paid, price FROM menus WHERE callback_key=?", (callback_key,))
+    row = c.fetchone()
     conn.close()
     return row
-
 
 def get_children(parent_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT title, callback_key
-    FROM menus
-    WHERE parent_id=?
-    """, (parent_id,))
-    rows = cur.fetchall()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT title, callback_key FROM menus WHERE parent_id=?", (parent_id,))
+    rows = c.fetchall()
     conn.close()
     return rows
-
 
 def get_root_menus():
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT title, callback_key
-    FROM menus
-    WHERE parent_id IS NULL
-    """)
-    rows = cur.fetchall()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT title, callback_key FROM menus WHERE parent_id IS NULL")
+    rows = c.fetchall()
     conn.close()
     return rows
 
-
-def delete_menu(callback_key):
-    """حذف منو و تمام زیرمنوهایش (به صورت آبشاری)"""
-    conn = connect()
-    cur = conn.cursor()
-    
-    # اول خود منو رو پیدا کن
-    cur.execute("SELECT id FROM menus WHERE callback_key=?", (callback_key,))
-    row = cur.fetchone()
+def delete_menu_by_callback(callback_key):
+    """حذف منو و همه زیرمنوها و فایل‌های مرتبط"""
+    conn = get_db()
+    c = conn.cursor()
+    # پیدا کردن ID منو
+    c.execute("SELECT id FROM menus WHERE callback_key=?", (callback_key,))
+    row = c.fetchone()
     if row:
         menu_id = row[0]
-        # حذف تمام زیرمنوها (با parent_id = menu_id)
-        cur.execute("DELETE FROM menus WHERE parent_id=?", (menu_id,))
+        # حذف زیرمنوها
+        c.execute("DELETE FROM menus WHERE parent_id=?", (menu_id,))
         # حذف خود منو
-        cur.execute("DELETE FROM menus WHERE id=?", (menu_id,))
-        # حذف فایل‌های متصل به این منو (اختیاری)
-        cur.execute("DELETE FROM content_files WHERE menu_id=?", (menu_id,))
-    
+        c.execute("DELETE FROM menus WHERE id=?", (menu_id,))
+        # حذف فایل‌های متصل
+        c.execute("DELETE FROM content_files WHERE menu_id=?", (menu_id,))
     conn.commit()
     conn.close()
 
-
-def set_menu_price(menu_id, price):
-    conn = connect()
-    cur = conn.cursor()
+def set_price(menu_id, price):
+    conn = get_db()
+    c = conn.cursor()
     if price == 0:
-        # اگر قیمت صفر باشه، منو رو رایگان کن
-        cur.execute("""
-        UPDATE menus
-        SET is_paid=0, price=0
-        WHERE id=?
-        """, (menu_id,))
+        c.execute("UPDATE menus SET is_paid=0, price=0 WHERE id=?", (menu_id,))
     else:
-        cur.execute("""
-        UPDATE menus
-        SET is_paid=1, price=?
-        WHERE id=?
-        """, (price, menu_id))
+        c.execute("UPDATE menus SET is_paid=1, price=? WHERE id=?", (price, menu_id))
     conn.commit()
     conn.close()
 
-
-# ========================= CONTENT =========================
+# ========== CONTENT ==========
 def add_content(menu_id, channel_id, message_id, caption=""):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    INSERT INTO content_files (menu_id, channel_id, message_id, caption, created_at)
-    VALUES (?, ?, ?, ?, ?)
-    """, (menu_id, channel_id, message_id, caption, datetime.now().isoformat()))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO content_files (menu_id, channel_id, message_id, caption, created_at) VALUES (?,?,?,?,?)",
+              (menu_id, channel_id, message_id, caption, datetime.now().isoformat()))
     conn.commit()
     conn.close()
-
 
 def get_content(menu_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT channel_id, message_id
-    FROM content_files
-    WHERE menu_id=?
-    LIMIT 1
-    """, (menu_id,))
-    row = cur.fetchone()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT channel_id, message_id FROM content_files WHERE menu_id=? LIMIT 1", (menu_id,))
+    row = c.fetchone()
     conn.close()
     return row
 
-
-# ========================= PAYMENTS =========================
+# ========== PAYMENTS ==========
 def add_payment(user_id, menu_id, amount):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    INSERT INTO payments (user_id, menu_id, amount, status, created_at)
-    VALUES (?, ?, ?, 'pending', ?)
-    """, (user_id, menu_id, amount, datetime.now().isoformat()))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("INSERT INTO payments (user_id, menu_id, amount, status, created_at) VALUES (?,?,?,?,?)",
+              (user_id, menu_id, amount, 'pending', datetime.now().isoformat()))
     conn.commit()
     conn.close()
-
 
 def set_payment_success(user_id, menu_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    UPDATE payments
-    SET status='paid'
-    WHERE user_id=? AND menu_id=?
-    """, (user_id, menu_id))
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE payments SET status='paid' WHERE user_id=? AND menu_id=?", (user_id, menu_id))
     conn.commit()
     conn.close()
 
-
 def is_paid(user_id, menu_id):
-    conn = connect()
-    cur = conn.cursor()
-    cur.execute("""
-    SELECT 1 FROM payments
-    WHERE user_id=? AND menu_id=? AND status='paid'
-    """, (user_id, menu_id))
-    res = cur.fetchone()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM payments WHERE user_id=? AND menu_id=? AND status='paid'", (user_id, menu_id))
+    res = c.fetchone()
     conn.close()
     return res is not None
