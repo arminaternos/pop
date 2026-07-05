@@ -18,14 +18,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(title, callback_data=cb)] for title, cb in menus]
     await update.message.reply_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ===== یه هندلر برای همه چیز =====
 async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
     user_id = query.from_user.id
     
-    print(f"🔘 دکمه: {data}")  # برای دیباگ توی ترمینال
+    print(f"🔘 دکمه: {data}")
     
     # ===== دکمه‌های ادمین =====
     if data.startswith(("admin_", "parent_", "del_")):
@@ -53,7 +52,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     menu_id, title, is_paid, price = menu
     
-    # زیرمنوها
+    # زیرمنوها رو چک کن
     children = get_children(menu_id)
     if children:
         keyboard = [[InlineKeyboardButton(t, callback_data=c)] for t, c in children]
@@ -61,7 +60,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(title, reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # محتوا
+    # محتوا (فقط زیرمنوها میتونن محتوا داشته باشن)
     content = get_content(menu_id)
     if not content:
         await query.answer("محتوا یافت نشد", show_alert=True)
@@ -98,7 +97,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         logger.error(f"خطا: {e}")
         await query.message.reply_text("❌ خطا در ارسال محتوا.")
 
-# ===== مدیریت دکمه‌های ادمین =====
 async def admin_handler(query, context, data):
     user_id = query.from_user.id
     
@@ -116,12 +114,31 @@ async def admin_handler(query, context, data):
     
     # ===== افزودن زیرمنو =====
     if data == "admin_add_submenu":
-        menus = get_root_menus()
-        if not menus:
+        # همه منوها رو بگیر (هم ریشه هم زیرمنوها)
+        all_menus = get_all_menus()
+        if not all_menus:
             await query.message.reply_text("❌ اول یه منوی اصلی بساز.")
             return
-        keyboard = [[InlineKeyboardButton(t, callback_data=f"parent_{c}")] for t, c in menus]
-        await query.message.reply_text("زیر کدوم منو باشه؟", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        keyboard = []
+        for title, cb, parent_id in all_menus:
+            # مشخص کن که منوی اصلیه یا زیرمنو
+            if parent_id is None:
+                icon = "📁"
+            else:
+                # چک کن که خودش زیرمنو داره یا نه
+                menu = get_menu(cb)
+                if menu:
+                    menu_id = menu[0]
+                    children = get_children(menu_id)
+                    icon = "📂" if children else "📄"
+            keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"parent_{cb}")])
+        
+        await query.message.reply_text(
+            "زیر کدوم منو باشه؟\n"
+            "📁 = منوی اصلی | 📂 = زیرمنو | 📄 = منوی نهایی",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return
     
     if data.startswith("parent_"):
@@ -131,10 +148,34 @@ async def admin_handler(query, context, data):
         await query.message.reply_text("✏️ اسم زیرمنو رو بفرست:")
         return
     
-    # ===== افزودن فایل =====
+    # ===== افزودن فایل (فقط به زیرمنوها) =====
     if data == "admin_add_file":
-        context.user_data["step"] = "file_menu"
-        await query.message.reply_text("🔑 کد منو رو بفرست:")
+        # فقط منوهایی رو نشون بده که زیرمنو هستن (parent_id IS NOT NULL)
+        db = get_db()
+        c = db.cursor()
+        c.execute("SELECT title, callback_key FROM menus WHERE parent_id IS NOT NULL")
+        submenus = c.fetchall()
+        db.close()
+        
+        if not submenus:
+            await query.message.reply_text("❌ هیچ زیرمنویی وجود نداره. اول یه زیرمنو بساز.")
+            return
+        
+        keyboard = [[InlineKeyboardButton(f"📄 {title}", callback_data=f"file_{cb}")] for title, cb in submenus]
+        await query.message.reply_text(
+            "فایل رو به کدوم زیرمنو وصل کنم؟",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+    
+    if data.startswith("file_"):
+        cb = data[5:]
+        context.user_data["file_menu_key"] = cb
+        context.user_data["step"] = "file_wait"
+        await query.message.reply_text(
+            "📌 حالا پیام رو از کانال **فوروارد** کن.\n"
+            "(ربات باید عضو کانال باشه)"
+        )
         return
     
     # ===== تنظیم قیمت =====
@@ -152,10 +193,20 @@ async def admin_handler(query, context, data):
         
         keyboard = []
         for title, cb, parent_id in all_menus:
-            icon = "📁" if parent_id is None else "📄"
+            if parent_id is None:
+                icon = "📁"
+            else:
+                menu = get_menu(cb)
+                if menu:
+                    menu_id = menu[0]
+                    children = get_children(menu_id)
+                    icon = "📂" if children else "📄"
             keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"del_{cb}")])
         
-        await query.message.reply_text("منو رو برای حذف انتخاب کن:", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.message.reply_text(
+            "منو رو برای حذف انتخاب کن:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return
     
     if data.startswith("del_"):
@@ -200,7 +251,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("➕ افزودن منو", callback_data="admin_add_menu")],
         [InlineKeyboardButton("➕ افزودن زیرمنو", callback_data="admin_add_submenu")],
-        [InlineKeyboardButton("📁 افزودن فایل", callback_data="admin_add_file")],
+        [InlineKeyboardButton("📁 افزودن فایل به زیرمنو", callback_data="admin_add_file")],
         [InlineKeyboardButton("💰 تنظیم قیمت", callback_data="admin_set_price")],
         [InlineKeyboardButton("🗑 حذف منو", callback_data="admin_delete_menu")],
     ]
@@ -217,7 +268,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"📝 مرحله: {step} | متن: {text}")
     
-    # ساخت منو
+    # ===== ساخت منو =====
     if step == "menu_title":
         context.user_data["menu_title"] = text
         context.user_data["step"] = "menu_callback"
@@ -231,7 +282,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ منو ساخته شد.")
         return
     
-    # ساخت زیرمنو
+    # ===== ساخت زیرمنو =====
     if step == "submenu_title":
         context.user_data["submenu_title"] = text
         context.user_data["step"] = "submenu_callback"
@@ -252,30 +303,55 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ زیرمنو ساخته شد.")
         return
     
-    # اتصال فایل
-    if step == "file_menu":
-        menu = get_menu(text)
+    # ===== اتصال فایل (با فوروارد) =====
+    if step == "file_wait":
+        # دیباگ
+        print(f"📩 پیام دریافتی: {update.message}")
+        print(f"forward_from_chat: {update.message.forward_from_chat}")
+        print(f"forward_from_message_id: {update.message.forward_from_message_id}")
+        
+        if not update.message.forward_from_chat:
+            await update.message.reply_text(
+                "❌ لطفاً یک پیام رو **فوروارد** کن.\n"
+                "(روی پیام کلیک کن → Forward → ربات رو انتخاب کن)"
+            )
+            return
+        
+        menu_key = context.user_data.get("file_menu_key")
+        if not menu_key:
+            await update.message.reply_text("❌ خطا: منو پیدا نشد. دوباره از پنل ادمین اقدام کن.")
+            context.user_data.clear()
+            return
+        
+        menu = get_menu(menu_key)
         if not menu:
             await update.message.reply_text("❌ منو پیدا نشد.")
+            context.user_data.clear()
             return
-        context.user_data["file_menu_id"] = menu[0]
-        context.user_data["step"] = "file_wait"
-        await update.message.reply_text("📌 پیام رو از کانال فوروارد کن:")
-        return
-    
-    if step == "file_wait":
-        if not update.message.forward_from_chat:
-            await update.message.reply_text("❌ یه پیام فورواردی بفرست.")
-            return
-        menu_id = context.user_data.get("file_menu_id")
+        
+        menu_id = menu[0]
         channel_id = update.message.forward_from_chat.id
         message_id = update.message.forward_from_message_id
-        add_content(menu_id, channel_id, message_id, update.message.caption or "")
+        caption = update.message.caption or ""
+        
+        # چک کن که این منو زیرمنو هست یا نه (فقط زیرمنوها میتونن فایل داشته باشن)
+        db = get_db()
+        c = db.cursor()
+        c.execute("SELECT parent_id FROM menus WHERE id=?", (menu_id,))
+        parent_row = c.fetchone()
+        db.close()
+        
+        if not parent_row or parent_row[0] is None:
+            await update.message.reply_text("❌ فقط زیرمنوها میتونن فایل داشته باشن.")
+            context.user_data.clear()
+            return
+        
+        add_content(menu_id, channel_id, message_id, caption)
         context.user_data.clear()
-        await update.message.reply_text("✅ فایل متصل شد.")
+        await update.message.reply_text("✅ فایل با موفقیت به زیرمنو متصل شد.")
         return
     
-    # تنظیم قیمت
+    # ===== تنظیم قیمت =====
     if step == "set_price_menu":
         menu = get_menu(text)
         if not menu:
