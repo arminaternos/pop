@@ -11,13 +11,16 @@ def extract_ids_from_link(link):
     """استخراج channel_id و message_id از لینک تلگرام"""
     pattern = r'https?://t\.me/c/(\d+)/(\d+)'
     match = re.search(pattern, link)
-    if match:
-        channel_id = int(match.group(1))
-        message_id = int(match.group(2))
-        if channel_id > 0:
-            channel_id = -channel_id
-        return channel_id, message_id
-    return None, None
+    if not match:
+        return None, None
+        
+    internal_id = match.group(1)
+        
+    message_id = int(match.group(2))
+    
+    channel_id = int(f"-100{internal_id}")
+    
+    return channel_id, message_id
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -74,8 +77,18 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("محتوا یافت نشد", show_alert=True)
         return
     
-    channel_id, message_id = content
-    
+    for channel_id, message_id in contents:
+        sent = await context.bot.copy_message(
+            chat_id=query.message.chat.id,
+            from_chat_id=channel_id,
+            message_id=message_id
+        )
+        context.job_queue.run_once(
+            lambda ctx, chat=sent.chat.id, msg=sent.message_id:
+                ctx.bot.delete_message(chat_id=chat, message_id=msg),
+            DELETE_TIME
+        )
+        
     if is_paid and not is_paid(user_id, menu_id):
         await query.message.reply_text(f"💳 قیمت: {price} Stars")
         await context.bot.send_invoice(
@@ -100,7 +113,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             DELETE_TIME
         )
     except Exception as e:
-        logger.error(f"خطا: {e}")
+        logger.exception(e)
         await query.message.reply_text(f"❌ خطا در ارسال محتوا: {str(e)}")
 
 async def admin_handler(query, context, data):
@@ -332,6 +345,17 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         add_content(menu_id, channel_id, message_id, "")
+        
+        try:
+            await context.bot.copy_message(
+                chat_id=update.effective_chat.id,
+                from_chat_id=channel_id,
+                message_id=message_id
+            )
+        except Exception as e:
+            await update.message.reply_text(f"خطا:\n{e}")
+            return
+            
         context.user_data.clear()
         await update.message.reply_text(
             f"✅ فایل با موفقیت به زیرمنو متصل شد.\n\n"

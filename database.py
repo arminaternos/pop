@@ -44,6 +44,7 @@ def init_db():
             menu_id INTEGER NOT NULL,
             channel_id INTEGER NOT NULL,
             message_id INTEGER NOT NULL,
+            file_type TEXT,
             caption TEXT,
             created_at TEXT
         )
@@ -97,7 +98,7 @@ def add_menu(title, callback_key, parent_id=None):
 def get_menu(callback_key):
     db = get_db()
     c = db.cursor()
-    c.execute("SELECT id, title, is_paid, price FROM menus WHERE callback_key=?", (callback_key,))
+    c.execute("SELECT id, title, is_paid, parent_id, price FROM menus WHERE callback_key=?", (callback_key,))
     return c.fetchone()
 
 def get_root_menus():
@@ -141,19 +142,21 @@ def set_price(menu_id, price):
     db.commit()
     db.close()
 
-def add_content(menu_id, channel_id, message_id, caption=""):
+def add_content(menu_id, channel_id, message_id, file_type="", caption=""):
     db = get_db()
     c = db.cursor()
-    c.execute("INSERT INTO content_files (menu_id, channel_id, message_id, caption, created_at) VALUES (?,?,?,?,?)",
-              (menu_id, channel_id, message_id, caption, datetime.now().isoformat()))
+    c.execute("INSERT INTO content_files (menu_id, channel_id, message_id,file_type, caption, created_at) VALUES (?,?,?,?,?)",
+            (menu_id, channel_id, message_id, file_type, caption, datetime.now().isoformat()))
     db.commit()
     db.close()
 
 def get_content(menu_id):
     db = get_db()
     c = db.cursor()
-    c.execute("SELECT channel_id, message_id FROM content_files WHERE menu_id=? LIMIT 1", (menu_id,))
-    return c.fetchone()
+    c.execute("SELECT channel_id, message_id FROM content_files WHERE menu_id=?", (menu_id,))
+    result = c.fetchall()
+    db.close()
+    return result
 
 def add_payment(user_id, menu_id, amount):
     db = get_db()
