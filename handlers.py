@@ -7,6 +7,18 @@ from database import *
 
 logger = logging.getLogger(__name__)
 
+def extract_ids_from_link(link):
+    """استخراج channel_id و message_id از لینک تلگرام"""
+    pattern = r'https?://t\.me/c/(\d+)/(\d+)'
+    match = re.search(pattern, link)
+    if match:
+        channel_id = int(match.group(1))
+        message_id = int(match.group(2))
+        if channel_id > 0:
+            channel_id = -channel_id
+        return channel_id, message_id
+    return None, None
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id, user.username, user.full_name)
@@ -27,7 +39,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     print(f"🔘 دکمه: {data}")
     
-    # ===== دکمه‌های ادمین =====
     if data.startswith(("admin_", "parent_", "del_", "file_")):
         if not is_admin(user_id):
             await query.message.reply_text("⛔ دسترسی ندارید.")
@@ -35,7 +46,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await admin_handler(query, context, data)
         return
     
-    # ===== دکمه بازگشت =====
     if data == "back":
         menus = get_root_menus()
         if not menus:
@@ -45,23 +55,20 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # ===== منوی معمولی =====
     menu = get_menu(data)
     if not menu:
         await query.answer("نامعتبر", show_alert=True)
         return
     
     menu_id, title, is_paid, price = menu
-    
-    # زیرمنوها رو چک کن
     children = get_children(menu_id)
+    
     if children:
         keyboard = [[InlineKeyboardButton(t, callback_data=c)] for t, c in children]
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
         await query.edit_message_text(title, reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # محتوا
     content = get_content(menu_id)
     if not content:
         await query.answer("محتوا یافت نشد", show_alert=True)
@@ -69,7 +76,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     
     channel_id, message_id = content
     
-    # پرداخت
     if is_paid and not is_paid(user_id, menu_id):
         await query.message.reply_text(f"💳 قیمت: {price} Stars")
         await context.bot.send_invoice(
@@ -83,7 +89,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
     
-    # ارسال محتوا
     try:
         sent = await context.bot.copy_message(
             chat_id=query.message.chat.id,
@@ -96,7 +101,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         )
     except Exception as e:
         logger.error(f"خطا: {e}")
-        await query.message.reply_text("❌ خطا در ارسال محتوا.")
+        await query.message.reply_text(f"❌ خطا در ارسال محتوا: {str(e)}")
 
 async def admin_handler(query, context, data):
     user_id = query.from_user.id
@@ -107,13 +112,11 @@ async def admin_handler(query, context, data):
     
     print(f"🔧 ادمین: {data}")
     
-    # ===== افزودن منو =====
     if data == "admin_add_menu":
         context.user_data["step"] = "menu_title"
         await query.message.reply_text("✏️ اسم منو رو بفرست:")
         return
     
-    # ===== افزودن زیرمنو =====
     if data == "admin_add_submenu":
         all_menus = get_all_menus()
         if not all_menus:
@@ -133,8 +136,7 @@ async def admin_handler(query, context, data):
             keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"parent_{cb}")])
         
         await query.message.reply_text(
-            "زیر کدوم منو باشه؟\n"
-            "📁 = منوی اصلی | 📂 = زیرمنو | 📄 = منوی نهایی",
+            "زیر کدوم منو باشه؟\n📁=اصلی 📂=زیرمنو 📄=نهایی",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
         return
@@ -146,9 +148,7 @@ async def admin_handler(query, context, data):
         await query.message.reply_text("✏️ اسم زیرمنو رو بفرست:")
         return
     
-    # ===== افزودن فایل (فقط به زیرمنوها) =====
     if data == "admin_add_file":
-        # فقط منوهایی رو نشون بده که زیرمنو هستن (parent_id IS NOT NULL)
         db = get_db()
         c = db.cursor()
         c.execute("SELECT title, callback_key FROM menus WHERE parent_id IS NOT NULL")
@@ -166,29 +166,23 @@ async def admin_handler(query, context, data):
         )
         return
     
-    # ===== پردازش انتخاب زیرمنو برای فایل =====
     if data.startswith("file_"):
         cb = data[5:]
         context.user_data["file_menu_key"] = cb
         context.user_data["step"] = "file_wait_link"
         await query.message.reply_text(
             "📌 لینک پیام رو بفرست.\n\n"
-            "چطور لینک رو بگیرم؟\n"
-            "۱. توی کانال، روی پیام کلیک کن\n"
-            "۲. گزینه **Copy Message Link** رو بزن\n"
-            "۳. لینک رو اینجا بفرست\n\n"
+            "روی پیام کلیک کن → Copy Message Link\n"
             "مثلاً: `https://t.me/c/123456789/123`",
             parse_mode="Markdown"
         )
         return
     
-    # ===== تنظیم قیمت =====
     if data == "admin_set_price":
         context.user_data["step"] = "set_price_menu"
         await query.message.reply_text("🔑 کد منو رو بفرست:")
         return
     
-    # ===== حذف منو =====
     if data == "admin_delete_menu":
         all_menus = get_all_menus()
         if not all_menus:
@@ -207,10 +201,7 @@ async def admin_handler(query, context, data):
                     icon = "📂" if children else "📄"
             keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"del_{cb}")])
         
-        await query.message.reply_text(
-            "منو رو برای حذف انتخاب کن:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await query.message.reply_text("منو رو برای حذف انتخاب کن:", reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
     if data.startswith("del_"):
@@ -219,7 +210,6 @@ async def admin_handler(query, context, data):
         await query.message.reply_text(f"✅ منو حذف شد.")
         return
 
-# ===== پرداخت =====
 async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
@@ -246,7 +236,6 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                 DELETE_TIME
             )
 
-# ===== پنل ادمین =====
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ دسترسی ندارید.")
@@ -261,20 +250,6 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("🛠 پنل ادمین", reply_markup=InlineKeyboardMarkup(keyboard))
 
-def extract_ids_from_link(link):
-    """استخراج channel_id و message_id از لینک تلگرام"""
-    pattern = r'https?://t\.me/c/(\d+)/(\d+)'
-    match = re.search(pattern, link)
-    if match:
-        channel_id = int(match.group(1))
-        message_id = int(match.group(2))
-        # اگر channel_id مثبت بود، منفی کن (چون کانال‌ها منفی هستن)
-        if channel_id > 0:
-            channel_id = -channel_id
-        return channel_id, message_id
-    return None, None
-
-# ===== دریافت متن =====
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_admin(user_id):
@@ -285,7 +260,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     print(f"📝 مرحله: {step} | متن: {text}")
     
-    # ===== ساخت منو =====
     if step == "menu_title":
         context.user_data["menu_title"] = text
         context.user_data["step"] = "menu_callback"
@@ -299,7 +273,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ منو ساخته شد.")
         return
     
-    # ===== ساخت زیرمنو =====
     if step == "submenu_title":
         context.user_data["submenu_title"] = text
         context.user_data["step"] = "submenu_callback"
@@ -320,24 +293,22 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ زیرمنو ساخته شد.")
         return
     
-    # ===== اتصال فایل (با لینک) =====
+    # ===== فقط لینک =====
     if step == "file_wait_link":
-        # استخراج IDها از لینک
         channel_id, message_id = extract_ids_from_link(text)
         
         if not channel_id or not message_id:
             await update.message.reply_text(
                 "❌ لینک معتبر نیست.\n"
                 "لینک باید به این شکل باشه:\n"
-                "`https://t.me/c/123456789/123`\n\n"
-                "دوباره تلاش کن.",
+                "`https://t.me/c/123456789/123`",
                 parse_mode="Markdown"
             )
             return
         
         menu_key = context.user_data.get("file_menu_key")
         if not menu_key:
-            await update.message.reply_text("❌ خطا: منو پیدا نشد. دوباره از پنل ادمین اقدام کن.")
+            await update.message.reply_text("❌ خطا: منو پیدا نشد.")
             context.user_data.clear()
             return
         
@@ -349,7 +320,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         menu_id = menu[0]
         
-        # چک کن که این منو زیرمنو هست یا نه
         db = get_db()
         c = db.cursor()
         c.execute("SELECT parent_id FROM menus WHERE id=?", (menu_id,))
@@ -365,14 +335,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
         await update.message.reply_text(
             f"✅ فایل با موفقیت به زیرمنو متصل شد.\n\n"
-            f"📌 Channel ID: `{channel_id}`\n"
-            f"📌 Message ID: `{message_id}`\n\n"
-            f"حالا هر کاربری روی این زیرمنو کلیک کنه، پیام براش ارسال میشه.",
+            f"Channel ID: `{channel_id}`\n"
+            f"Message ID: `{message_id}`",
             parse_mode="Markdown"
         )
         return
     
-    # ===== تنظیم قیمت =====
     if step == "set_price_menu":
         menu = get_menu(text)
         if not menu:
