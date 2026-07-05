@@ -7,7 +7,7 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN
-import database import connect
+from database import connect
 from handlers import start, button_handler, channel_post
 
 
