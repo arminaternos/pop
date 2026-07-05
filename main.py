@@ -7,7 +7,7 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN
-from database import connect
+
 from handlers import start, button_handler, channel_post
 
 
@@ -21,6 +21,7 @@ def main():
     MessageHandler(filters.UpdateType.CHANNEL_POST, channel_post))
 
     # دریافت پیام‌های کانال
+    from database import connect
     conn = connect()
     cur = conn.cursor()
 
