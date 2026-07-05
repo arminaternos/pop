@@ -21,8 +21,8 @@ def main():
     MessageHandler(filters.UpdateType.CHANNEL_POST, channel_post))
 
     # دریافت پیام‌های کانال
-  conn = connect()
-  cur = conn.cursor()
+    conn = connect()
+    cur = conn.cursor()
 
  cur.execute("""
 INSERT INTO files (subcategory_id, message_id, caption)
