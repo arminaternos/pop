@@ -27,7 +27,8 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     print(f"🔘 دکمه: {data}")
     
     # ===== دکمه‌های ادمین =====
-    if data.startswith(("admin_", "parent_", "del_")):
+    # ✅ اینجا file_ رو هم اضافه کردم
+    if data.startswith(("admin_", "parent_", "del_", "file_")):
         if not is_admin(user_id):
             await query.message.reply_text("⛔ دسترسی ندارید.")
             return
@@ -114,7 +115,6 @@ async def admin_handler(query, context, data):
     
     # ===== افزودن زیرمنو =====
     if data == "admin_add_submenu":
-        # همه منوها رو بگیر (هم ریشه هم زیرمنوها)
         all_menus = get_all_menus()
         if not all_menus:
             await query.message.reply_text("❌ اول یه منوی اصلی بساز.")
@@ -122,11 +122,9 @@ async def admin_handler(query, context, data):
         
         keyboard = []
         for title, cb, parent_id in all_menus:
-            # مشخص کن که منوی اصلیه یا زیرمنو
             if parent_id is None:
                 icon = "📁"
             else:
-                # چک کن که خودش زیرمنو داره یا نه
                 menu = get_menu(cb)
                 if menu:
                     menu_id = menu[0]
@@ -168,8 +166,9 @@ async def admin_handler(query, context, data):
         )
         return
     
+    # ===== پردازش انتخاب زیرمنو برای فایل =====
     if data.startswith("file_"):
-        cb = data[5:]
+        cb = data[5:]  # file_ رو حذف کن
         context.user_data["file_menu_key"] = cb
         context.user_data["step"] = "file_wait"
         await query.message.reply_text(
@@ -305,7 +304,6 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # ===== اتصال فایل (با فوروارد) =====
     if step == "file_wait":
-        # دیباگ
         print(f"📩 پیام دریافتی: {update.message}")
         print(f"forward_from_chat: {update.message.forward_from_chat}")
         print(f"forward_from_message_id: {update.message.forward_from_message_id}")
