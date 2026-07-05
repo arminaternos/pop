@@ -20,7 +20,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data = query.data
 
-    # اگر callback مربوط به یک منو باشد
+    # اگر callback مربوط به منو باشد
     if data in MENU:
         await query.edit_message_text(
             MENU[data]["title"],
@@ -28,31 +28,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # تست ارسال فایل از کانال
     if data == "hf":
-    conn = connect()
-    cur = conn.cursor()
+        conn = connect()
+        cur = conn.cursor()
 
-    cur.execute("""
-        SELECT message_id FROM files
-        WHERE subcategory_id = ?
-        LIMIT 1
-    """, (1,))  # فعلاً تستی
+        cur.execute("""
+            SELECT message_id FROM files
+            WHERE subcategory_id = ?
+            LIMIT 1
+        """, (1,))
 
-    row = cur.fetchone()
-    conn.close()
+        row = cur.fetchone()
+        conn.close()
 
-    if row:
-        await context.bot.copy_message(
-            chat_id=query.message.chat.id,
-            from_chat_id=CHANNEL_ID,
-            message_id=row[0]
-        )
-    else:
-        await query.answer("فایل پیدا نشد", show_alert=True)
+        if row:
+            await context.bot.copy_message(
+                chat_id=query.message.chat.id,
+                from_chat_id=CHANNEL_ID,
+                message_id=row[0]
+            )
+        else:
+            await query.answer("فایل پیدا نشد", show_alert=True)
         return
-
-    await query.answer()
-    return
 
     # دکمه بازگشت
     if data == "back":
@@ -62,12 +60,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # بقیه دکمه‌ها
-    await query.answer(
-        "🚧 این بخش هنوز تکمیل نشده.",
-        show_alert=True
-    )
-
+    await query.answer("🚧 این بخش هنوز تکمیل نشده.", show_alert=True)
 
 async def channel_post(update: Update, context: ContextTypes.DEFAULT_TYPE):
     post = update.channel_post
