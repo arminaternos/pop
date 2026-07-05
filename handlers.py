@@ -1,4 +1,5 @@
 import logging
+import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import ContextTypes
 from config import DELETE_TIME
@@ -27,7 +28,6 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
     print(f"🔘 دکمه: {data}")
     
     # ===== دکمه‌های ادمین =====
-    # ✅ اینجا file_ رو هم اضافه کردم
     if data.startswith(("admin_", "parent_", "del_", "file_")):
         if not is_admin(user_id):
             await query.message.reply_text("⛔ دسترسی ندارید.")
@@ -61,7 +61,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(title, reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # محتوا (فقط زیرمنوها میتونن محتوا داشته باشن)
+    # محتوا
     content = get_content(menu_id)
     if not content:
         await query.answer("محتوا یافت نشد", show_alert=True)
@@ -168,12 +168,17 @@ async def admin_handler(query, context, data):
     
     # ===== پردازش انتخاب زیرمنو برای فایل =====
     if data.startswith("file_"):
-        cb = data[5:]  # file_ رو حذف کن
+        cb = data[5:]
         context.user_data["file_menu_key"] = cb
-        context.user_data["step"] = "file_wait"
+        context.user_data["step"] = "file_wait_link"
         await query.message.reply_text(
-            "📌 حالا پیام رو از کانال **فوروارد** کن.\n"
-            "(ربات باید عضو کانال باشه)"
+            "📌 لینک پیام رو بفرست.\n\n"
+            "چطور لینک رو بگیرم؟\n"
+            "۱. توی کانال، روی پیام کلیک کن\n"
+            "۲. گزینه **Copy Message Link** رو بزن\n"
+            "۳. لینک رو اینجا بفرست\n\n"
+            "مثلاً: `https://t.me/c/123456789/123`",
+            parse_mode="Markdown"
         )
         return
     
@@ -256,6 +261,19 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("🛠 پنل ادمین", reply_markup=InlineKeyboardMarkup(keyboard))
 
+def extract_ids_from_link(link):
+    """استخراج channel_id و message_id از لینک تلگرام"""
+    pattern = r'https?://t\.me/c/(\d+)/(\d+)'
+    match = re.search(pattern, link)
+    if match:
+        channel_id = int(match.group(1))
+        message_id = int(match.group(2))
+        # اگر channel_id مثبت بود، منفی کن (چون کانال‌ها منفی هستن)
+        if channel_id > 0:
+            channel_id = -channel_id
+        return channel_id, message_id
+    return None, None
+
 # ===== دریافت متن =====
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -302,16 +320,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ زیرمنو ساخته شد.")
         return
     
-    # ===== اتصال فایل (با فوروارد) =====
-    if step == "file_wait":
-        print(f"📩 پیام دریافتی: {update.message}")
-        print(f"forward_from_chat: {update.message.forward_from_chat}")
-        print(f"forward_from_message_id: {update.message.forward_from_message_id}")
+    # ===== اتصال فایل (با لینک) =====
+    if step == "file_wait_link":
+        # استخراج IDها از لینک
+        channel_id, message_id = extract_ids_from_link(text)
         
-        if not update.message.forward_from_chat:
+        if not channel_id or not message_id:
             await update.message.reply_text(
-                "❌ لطفاً یک پیام رو **فوروارد** کن.\n"
-                "(روی پیام کلیک کن → Forward → ربات رو انتخاب کن)"
+                "❌ لینک معتبر نیست.\n"
+                "لینک باید به این شکل باشه:\n"
+                "`https://t.me/c/123456789/123`\n\n"
+                "دوباره تلاش کن.",
+                parse_mode="Markdown"
             )
             return
         
@@ -328,11 +348,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         menu_id = menu[0]
-        channel_id = update.message.forward_from_chat.id
-        message_id = update.message.forward_from_message_id
-        caption = update.message.caption or ""
         
-        # چک کن که این منو زیرمنو هست یا نه (فقط زیرمنوها میتونن فایل داشته باشن)
+        # چک کن که این منو زیرمنو هست یا نه
         db = get_db()
         c = db.cursor()
         c.execute("SELECT parent_id FROM menus WHERE id=?", (menu_id,))
@@ -344,9 +361,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data.clear()
             return
         
-        add_content(menu_id, channel_id, message_id, caption)
+        add_content(menu_id, channel_id, message_id, "")
         context.user_data.clear()
-        await update.message.reply_text("✅ فایل با موفقیت به زیرمنو متصل شد.")
+        await update.message.reply_text(
+            f"✅ فایل با موفقیت به زیرمنو متصل شد.\n\n"
+            f"📌 Channel ID: `{channel_id}`\n"
+            f"📌 Message ID: `{message_id}`\n\n"
+            f"حالا هر کاربری روی این زیرمنو کلیک کنه، پیام براش ارسال میشه.",
+            parse_mode="Markdown"
+        )
         return
     
     # ===== تنظیم قیمت =====
