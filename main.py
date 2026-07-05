@@ -10,8 +10,9 @@ from telegram.ext import (
 from config import BOT_TOKEN
 from handlers import (
     start,
-    callback_handler,
+    button_handler,
     admin_panel,
+    admin_buttons,
     text_handler,
     pre_checkout_handler,
     successful_payment_handler,
@@ -43,12 +44,13 @@ def main():
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("admin", admin_panel))
-    app.add_handler(CallbackQueryHandler(callback_handler))
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(CallbackQueryHandler(admin_buttons))
     app.add_handler(PreCheckoutQueryHandler(pre_checkout_handler))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
     
-    logger.info("Bot started!")
+    logger.info("🤖 Bot started!")
     app.run_polling()
 
 if __name__ == "__main__":

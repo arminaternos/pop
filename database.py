@@ -4,15 +4,19 @@ from datetime import datetime
 DB_NAME = "bot.db"
 
 def connect():
+    """اتصال به دیتابیس"""
     return sqlite3.connect(DB_NAME)
 
 def get_db():
+    """همون connect - برای سازگاری"""
     return connect()
 
 def init_db():
+    """ساخت جداول دیتابیس"""
     db = get_db()
     c = db.cursor()
     
+    # جدول کاربران
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,6 +27,7 @@ def init_db():
         )
     ''')
     
+    # جدول ادمین‌ها
     c.execute('''
         CREATE TABLE IF NOT EXISTS admins (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,6 +35,7 @@ def init_db():
         )
     ''')
     
+    # جدول منوها
     c.execute('''
         CREATE TABLE IF NOT EXISTS menus (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +47,7 @@ def init_db():
         )
     ''')
     
+    # جدول فایل‌های محتوا
     c.execute('''
         CREATE TABLE IF NOT EXISTS content_files (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,6 +59,7 @@ def init_db():
         )
     ''')
     
+    # جدول پرداخت‌ها
     c.execute('''
         CREATE TABLE IF NOT EXISTS payments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,6 +73,7 @@ def init_db():
     
     db.commit()
     db.close()
+    print("✅ دیتابیس ساخته شد.")
 
 # ===== کاربران =====
 def add_user(user_id, username, full_name):
@@ -90,6 +99,16 @@ def add_admin(user_id):
     c.execute("INSERT OR IGNORE INTO admins (user_id) VALUES (?)", (user_id,))
     db.commit()
     db.close()
+    print(f"✅ ادمین {user_id} اضافه شد.")
+
+def get_all_admins():
+    """دریافت لیست همه ادمین‌ها"""
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT user_id FROM admins")
+    result = c.fetchall()
+    db.close()
+    return result
 
 # ===== منوها =====
 def add_menu(title, callback_key, parent_id=None):
@@ -124,6 +143,15 @@ def get_children(parent_id):
     db.close()
     return result
 
+def get_all_menus():
+    """دریافت همه منوها (برای نمایش در لیست حذف)"""
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT title, callback_key FROM menus ORDER BY parent_id IS NULL DESC, id")
+    result = c.fetchall()
+    db.close()
+    return result
+
 def delete_menu(callback_key):
     db = get_db()
     c = db.cursor()
@@ -138,6 +166,7 @@ def delete_menu(callback_key):
         c.execute("DELETE FROM menus WHERE parent_id=?", (menu_id,))
         # حذف خود منو
         c.execute("DELETE FROM menus WHERE id=?", (menu_id,))
+        print(f"✅ منو {callback_key} حذف شد.")
     db.commit()
     db.close()
 
