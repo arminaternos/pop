@@ -12,9 +12,6 @@ def init_db():
     conn = connect()
     cur = conn.cursor()
 
-    # =========================
-    # USERS
-    # =========================
     cur.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,9 +22,6 @@ def init_db():
     )
     """)
 
-    # =========================
-    # ADMINS
-    # =========================
     cur.execute("""
     CREATE TABLE IF NOT EXISTS admins (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,9 +29,6 @@ def init_db():
     )
     """)
 
-    # =========================
-    # MENUS (داینامیک کامل)
-    # =========================
     cur.execute("""
     CREATE TABLE IF NOT EXISTS menus (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,9 +40,6 @@ def init_db():
     )
     """)
 
-    # =========================
-    # CONTENT FILES (لینک به کانال)
-    # =========================
     cur.execute("""
     CREATE TABLE IF NOT EXISTS content_files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,9 +52,6 @@ def init_db():
     )
     """)
 
-    # =========================
-    # PAYMENTS (ONE-TIME)
-    # =========================
     cur.execute("""
     CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -82,9 +67,6 @@ def init_db():
     conn.close()
 
 
-# =========================
-# USERS
-# =========================
 def add_user(user_id, username, full_name):
     conn = connect()
     cur = conn.cursor()
@@ -96,9 +78,6 @@ def add_user(user_id, username, full_name):
     conn.close()
 
 
-# =========================
-# ADMINS
-# =========================
 def is_admin(user_id):
     conn = connect()
     cur = conn.cursor()
@@ -116,9 +95,6 @@ def add_admin(user_id):
     conn.close()
 
 
-# =========================
-# MENUS
-# =========================
 def add_menu(title, callback_key, parent_id=None, is_paid=0, price=0):
     conn = connect()
     cur = conn.cursor()
@@ -157,6 +133,7 @@ def get_children(parent_id):
 
 
 def get_root_menus():
+    """دریافت منوهای سطح اول (بدون پدر)"""
     conn = connect()
     cur = conn.cursor()
     cur.execute("""
@@ -189,9 +166,6 @@ def set_menu_price(menu_id, price):
     conn.close()
 
 
-# =========================
-# CONTENT
-# =========================
 def add_content(menu_id, channel_id, message_id, caption=""):
     conn = connect()
     cur = conn.cursor()
@@ -217,9 +191,6 @@ def get_content(menu_id):
     return row
 
 
-# =========================
-# PAYMENTS
-# =========================
 def add_payment(user_id, menu_id, amount):
     conn = connect()
     cur = conn.cursor()
