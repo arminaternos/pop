@@ -133,7 +133,6 @@ def get_children(parent_id):
 
 
 def get_root_menus():
-    """دریافت منوهای سطح اول (بدون پدر)"""
     conn = connect()
     cur = conn.cursor()
     cur.execute("""
@@ -141,6 +140,15 @@ def get_root_menus():
     FROM menus
     WHERE parent_id IS NULL
     """)
+    rows = cur.fetchall()
+    conn.close()
+    return rows
+
+
+def get_all_menus():
+    conn = connect()
+    cur = conn.cursor()
+    cur.execute("SELECT title, callback_key FROM menus")
     rows = cur.fetchall()
     conn.close()
     return rows
