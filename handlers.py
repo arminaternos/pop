@@ -63,7 +63,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer("نامعتبر", show_alert=True)
         return
     
-    menu_id, title, is_paid, price = menu
+    menu_id, title, paid_flag, parent_id, price = menu
     children = get_children(menu_id)
     
     if children:
@@ -71,25 +71,8 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
         keyboard.append([InlineKeyboardButton("🔙 بازگشت", callback_data="back")])
         await query.edit_message_text(title, reply_markup=InlineKeyboardMarkup(keyboard))
         return
-    
-    content = get_content(menu_id)
-    if not content:
-        await query.answer("محتوا یافت نشد", show_alert=True)
-        return
-    
-    for channel_id, message_id in contents:
-        sent = await context.bot.copy_message(
-            chat_id=query.message.chat.id,
-            from_chat_id=channel_id,
-            message_id=message_id
-        )
-        context.job_queue.run_once(
-            lambda ctx, chat=sent.chat.id, msg=sent.message_id:
-                ctx.bot.delete_message(chat_id=chat, message_id=msg),
-            DELETE_TIME
-        )
         
-    if is_paid and not is_paid(user_id, menu_id):
+    if paid_flag and not is_paid(user_id, menu_id):
         await query.message.reply_text(f"💳 قیمت: {price} Stars")
         await context.bot.send_invoice(
             chat_id=user_id,
@@ -101,20 +84,30 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
             prices=[LabeledPrice("Access", price)]
         )
         return
+        
+    contents = get_content(menu_id)
+    if not contents:
+        await query.answer("محتوا یافت نشد", show_alert=True)
+        return
     
-    try:
-        sent = await context.bot.copy_message(
-            chat_id=query.message.chat.id,
-            from_chat_id=channel_id,
-            message_id=message_id
-        )
-        context.job_queue.run_once(
-            lambda ctx: ctx.bot.delete_message(chat_id=sent.chat.id, message_id=sent.message_id),
-            DELETE_TIME
-        )
-    except Exception as e:
-        logger.exception(e)
-        await query.message.reply_text(f"❌ خطا در ارسال محتوا: {str(e)}")
+    for channel_id, message_id in contents:
+        try:
+            sent = await context.bot.copy_message(
+                chat_id=query.message.chat.id,
+                from_chat_id=channel_id,
+                message_id=message_id
+            )
+            context.job_queue.run_once(
+                lambda ctx, chat=sent.chat.id, msg=sent.message_id:
+                    ctx.bot.delete_message(chat_id=chat, message_id=msg),
+                DELETE_TIME
+            )
+        except Exception as e:
+            logger.exception(e)
+        
+    
+    
+  
 
 async def admin_handler(query, context, data):
     user_id = query.from_user.id
@@ -236,18 +229,19 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         set_payment_success(user_id, menu_id)
         await msg.reply_text("✅ پرداخت موفق!")
         
-        content = get_content(menu_id)
-        if content:
-            channel_id, message_id = content
-            sent = await context.bot.copy_message(
-                chat_id=user_id,
-                from_chat_id=channel_id,
-                message_id=message_id
-            )
-            context.job_queue.run_once(
-                lambda ctx: ctx.bot.delete_message(chat_id=sent.chat.id, message_id=sent.message_id),
-                DELETE_TIME
-            )
+        contents = get_content(menu_id)
+        if contents:
+            
+            for channel_id, message_id in contents
+                sent = await context.bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=channel_id,
+                    message_id=message_id
+                )
+                context.job_queue.run_once(
+                    lambda ctx: ctx.bot.delete_message(chat_id=sent.chat.id, message_id=sent.message_id),
+                    DELETE_TIME
+                )
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
