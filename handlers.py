@@ -232,7 +232,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
         contents = get_content(menu_id)
         if contents:
             
-            for channel_id, message_id in contents
+            for channel_id, message_id in contents:
                 sent = await context.bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=channel_id,
