@@ -21,7 +21,7 @@ def main():
     MessageHandler(filters.UpdateType.CHANNEL_POST, channel_post))
 
     # دریافت پیام‌های کانال
-   conn = connect()
+ conn = connect()
  cur = conn.cursor()
 
  cur.execute("""
