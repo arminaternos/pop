@@ -145,7 +145,7 @@ def set_price(menu_id, price):
 def add_content(menu_id, channel_id, message_id, file_type="", caption=""):
     db = get_db()
     c = db.cursor()
-    c.execute("INSERT INTO content_files (menu_id, channel_id, message_id, file_type, caption, created_at) VALUES (?,?,?,?,?)",
+    c.execute("INSERT INTO content_files (menu_id, channel_id, message_id, file_type, caption, created_at) VALUES (?,?,?,?,?,?)",
             (menu_id, channel_id, message_id, file_type, caption, datetime.now().isoformat()))
     db.commit()
     db.close()
