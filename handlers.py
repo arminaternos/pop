@@ -18,13 +18,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [[InlineKeyboardButton(title, callback_data=cb)] for title, cb in menus]
     await update.message.reply_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# ===== یه هندلر برای همه چیز =====
+async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
     user_id = query.from_user.id
     
-    # برگشت به منوی اصلی
+    print(f"🔘 دکمه: {data}")  # برای دیباگ توی ترمینال
+    
+    # ===== دکمه‌های ادمین =====
+    if data.startswith(("admin_", "parent_", "del_")):
+        if not is_admin(user_id):
+            await query.message.reply_text("⛔ دسترسی ندارید.")
+            return
+        await admin_handler(query, context, data)
+        return
+    
+    # ===== دکمه بازگشت =====
     if data == "back":
         menus = get_root_menus()
         if not menus:
@@ -34,7 +45,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # منوی معمولی
+    # ===== منوی معمولی =====
     menu = get_menu(data)
     if not menu:
         await query.answer("نامعتبر", show_alert=True)
@@ -42,7 +53,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     menu_id, title, is_paid, price = menu
     
-    # زیرمنوها رو چک کن
+    # زیرمنوها
     children = get_children(menu_id)
     if children:
         keyboard = [[InlineKeyboardButton(t, callback_data=c)] for t, c in children]
@@ -87,7 +98,73 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا: {e}")
         await query.message.reply_text("❌ خطا در ارسال محتوا.")
 
-# پرداخت
+# ===== مدیریت دکمه‌های ادمین =====
+async def admin_handler(query, context, data):
+    user_id = query.from_user.id
+    
+    if not is_admin(user_id):
+        await query.message.reply_text("⛔ دسترسی ندارید.")
+        return
+    
+    print(f"🔧 ادمین: {data}")
+    
+    # ===== افزودن منو =====
+    if data == "admin_add_menu":
+        context.user_data["step"] = "menu_title"
+        await query.message.reply_text("✏️ اسم منو رو بفرست:")
+        return
+    
+    # ===== افزودن زیرمنو =====
+    if data == "admin_add_submenu":
+        menus = get_root_menus()
+        if not menus:
+            await query.message.reply_text("❌ اول یه منوی اصلی بساز.")
+            return
+        keyboard = [[InlineKeyboardButton(t, callback_data=f"parent_{c}")] for t, c in menus]
+        await query.message.reply_text("زیر کدوم منو باشه؟", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    
+    if data.startswith("parent_"):
+        parent_cb = data[7:]
+        context.user_data["parent_key"] = parent_cb
+        context.user_data["step"] = "submenu_title"
+        await query.message.reply_text("✏️ اسم زیرمنو رو بفرست:")
+        return
+    
+    # ===== افزودن فایل =====
+    if data == "admin_add_file":
+        context.user_data["step"] = "file_menu"
+        await query.message.reply_text("🔑 کد منو رو بفرست:")
+        return
+    
+    # ===== تنظیم قیمت =====
+    if data == "admin_set_price":
+        context.user_data["step"] = "set_price_menu"
+        await query.message.reply_text("🔑 کد منو رو بفرست:")
+        return
+    
+    # ===== حذف منو =====
+    if data == "admin_delete_menu":
+        all_menus = get_all_menus()
+        if not all_menus:
+            await query.message.reply_text("📭 منویی وجود ندارد.")
+            return
+        
+        keyboard = []
+        for title, cb, parent_id in all_menus:
+            icon = "📁" if parent_id is None else "📄"
+            keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"del_{cb}")])
+        
+        await query.message.reply_text("منو رو برای حذف انتخاب کن:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
+    
+    if data.startswith("del_"):
+        cb = data[4:]
+        delete_menu(cb)
+        await query.message.reply_text(f"✅ منو حذف شد.")
+        return
+
+# ===== پرداخت =====
 async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
@@ -114,7 +191,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                 DELETE_TIME
             )
 
-# پنل ادمین
+# ===== پنل ادمین =====
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ دسترسی ندارید.")
@@ -129,74 +206,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("🛠 پنل ادمین", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# دکمه‌های ادمین
-async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data
-    user_id = query.from_user.id
-    
-    if not is_admin(user_id):
-        await query.message.reply_text("⛔ دسترسی ندارید.")
-        return
-    
-    # افزودن منو
-    if data == "admin_add_menu":
-        context.user_data["step"] = "menu_title"
-        await query.message.reply_text("✏️ اسم منو رو بفرست:")
-        return
-    
-    # افزودن زیرمنو
-    if data == "admin_add_submenu":
-        menus = get_root_menus()
-        if not menus:
-            await query.message.reply_text("❌ اول یه منوی اصلی بساز.")
-            return
-        keyboard = [[InlineKeyboardButton(t, callback_data=f"parent_{c}")] for t, c in menus]
-        await query.message.reply_text("زیر کدوم منو باشه؟", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    if data.startswith("parent_"):
-        parent_cb = data[7:]
-        context.user_data["parent_key"] = parent_cb
-        context.user_data["step"] = "submenu_title"
-        await query.message.reply_text("✏️ اسم زیرمنو رو بفرست:")
-        return
-    
-    # افزودن فایل
-    if data == "admin_add_file":
-        context.user_data["step"] = "file_menu"
-        await query.message.reply_text("🔑 کد منو رو بفرست:")
-        return
-    
-    # تنظیم قیمت
-    if data == "admin_set_price":
-        context.user_data["step"] = "set_price_menu"
-        await query.message.reply_text("🔑 کد منو رو بفرست:")
-        return
-    
-    # حذف منو
-    if data == "admin_delete_menu":
-        all_menus = get_all_menus()
-        if not all_menus:
-            await query.message.reply_text("📭 منویی وجود ندارد.")
-            return
-        
-        keyboard = []
-        for title, cb, parent_id in all_menus:
-            icon = "📁" if parent_id is None else "📄"
-            keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"del_{cb}")])
-        
-        await query.message.reply_text("منو رو برای حذف انتخاب کن:", reply_markup=InlineKeyboardMarkup(keyboard))
-        return
-    
-    if data.startswith("del_"):
-        cb = data[4:]
-        delete_menu(cb)
-        await query.message.reply_text(f"✅ منو حذف شد.")
-        return
-
-# دریافت متن از کاربر
+# ===== دریافت متن =====
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_admin(user_id):
@@ -204,6 +214,8 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     step = context.user_data.get("step")
     text = update.message.text.strip()
+    
+    print(f"📝 مرحله: {step} | متن: {text}")
     
     # ساخت منو
     if step == "menu_title":
