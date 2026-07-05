@@ -6,33 +6,25 @@ from database import *
 
 logger = logging.getLogger(__name__)
 
-# ===== استارت =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user = update.effective_user
-        add_user(user.id, user.username, user.full_name)
-        
-        menus = get_root_menus()
-        if not menus:
-            await update.message.reply_text("⛔ منویی وجود ندارد.")
-            return
-        
-        keyboard = [[InlineKeyboardButton(title, callback_data=cb)] for title, cb in menus]
-        await update.message.reply_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
-    except Exception as e:
-        print(f"ERROR in start: {e}")
-        import traceback
-        traceback.print_exc()
-        await update.message.reply_text(f"❌ خطا: {str(e)}")
+    user = update.effective_user
+    add_user(user.id, user.username, user.full_name)
+    
+    menus = get_root_menus()
+    if not menus:
+        await update.message.reply_text("⛔ منویی وجود ندارد. از /admin استفاده کن.")
+        return
+    
+    keyboard = [[InlineKeyboardButton(title, callback_data=cb)] for title, cb in menus]
+    await update.message.reply_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ===== دکمه‌ها =====
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
     user_id = query.from_user.id
     
-    # بازگشت
+    # برگشت به منوی اصلی
     if data == "back":
         menus = get_root_menus()
         if not menus:
@@ -42,7 +34,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text("📌 منوی اصلی", reply_markup=InlineKeyboardMarkup(keyboard))
         return
     
-    # منو
+    # منوی معمولی
     menu = get_menu(data)
     if not menu:
         await query.answer("نامعتبر", show_alert=True)
@@ -50,7 +42,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     menu_id, title, is_paid, price = menu
     
-    # زیرمنوها
+    # زیرمنوها رو چک کن
     children = get_children(menu_id)
     if children:
         keyboard = [[InlineKeyboardButton(t, callback_data=c)] for t, c in children]
@@ -66,9 +58,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     channel_id, message_id = content
     
-    # چک پرداخت
+    # پرداخت
     if is_paid and not is_paid(user_id, menu_id):
-        await query.message.reply_text(f"💳 قیمت: {price} Stars\nبرای دسترسی باید پرداخت کنید.")
+        await query.message.reply_text(f"💳 قیمت: {price} Stars")
         await context.bot.send_invoice(
             chat_id=user_id,
             title="خرید محتوا",
@@ -95,7 +87,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"خطا: {e}")
         await query.message.reply_text("❌ خطا در ارسال محتوا.")
 
-# ===== پرداخت =====
+# پرداخت
 async def pre_checkout_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.pre_checkout_query.answer(ok=True)
 
@@ -122,7 +114,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                 DELETE_TIME
             )
 
-# ===== پنل ادمین =====
+# پنل ادمین
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         await update.message.reply_text("⛔ دسترسی ندارید.")
@@ -137,6 +129,7 @@ async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     await update.message.reply_text("🛠 پنل ادمین", reply_markup=InlineKeyboardMarkup(keyboard))
 
+# دکمه‌های ادمین
 async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -147,62 +140,63 @@ async def admin_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("⛔ دسترسی ندارید.")
         return
     
-    # ===== افزودن منو =====
+    # افزودن منو
     if data == "admin_add_menu":
         context.user_data["step"] = "menu_title"
-        context.user_data["is_submenu"] = False
         await query.message.reply_text("✏️ اسم منو رو بفرست:")
+        return
     
-    # ===== افزودن زیرمنو =====
-    elif data == "admin_add_submenu":
+    # افزودن زیرمنو
+    if data == "admin_add_submenu":
         menus = get_root_menus()
         if not menus:
             await query.message.reply_text("❌ اول یه منوی اصلی بساز.")
             return
         keyboard = [[InlineKeyboardButton(t, callback_data=f"parent_{c}")] for t, c in menus]
-        await query.message.reply_text("زیر کدوم منو میخوای باشه؟", reply_markup=InlineKeyboardMarkup(keyboard))
+        await query.message.reply_text("زیر کدوم منو باشه؟", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
     
-    elif data.startswith("parent_"):
+    if data.startswith("parent_"):
         parent_cb = data[7:]
         context.user_data["parent_key"] = parent_cb
         context.user_data["step"] = "submenu_title"
         await query.message.reply_text("✏️ اسم زیرمنو رو بفرست:")
+        return
     
-    # ===== افزودن فایل =====
-    elif data == "admin_add_file":
+    # افزودن فایل
+    if data == "admin_add_file":
         context.user_data["step"] = "file_menu"
         await query.message.reply_text("🔑 کد منو رو بفرست:")
+        return
     
-    # ===== تنظیم قیمت =====
-    elif data == "admin_set_price":
+    # تنظیم قیمت
+    if data == "admin_set_price":
         context.user_data["step"] = "set_price_menu"
         await query.message.reply_text("🔑 کد منو رو بفرست:")
+        return
     
-    # ===== حذف منو =====
-    elif data == "admin_delete_menu":
+    # حذف منو
+    if data == "admin_delete_menu":
         all_menus = get_all_menus()
-        
         if not all_menus:
             await query.message.reply_text("📭 منویی وجود ندارد.")
             return
         
         keyboard = []
-        for title, cb in all_menus:
-            menu = get_menu(cb)
-            if menu:
-                menu_id, _, _, _ = menu
-                children = get_children(menu_id)
-                icon = "📁" if children else "📄"
-                keyboard.append([InlineKeyboardButton(f"{icon} {title} ({cb})", callback_data=f"del_{cb}")])
+        for title, cb, parent_id in all_menus:
+            icon = "📁" if parent_id is None else "📄"
+            keyboard.append([InlineKeyboardButton(f"{icon} {title}", callback_data=f"del_{cb}")])
         
         await query.message.reply_text("منو رو برای حذف انتخاب کن:", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
     
-    elif data.startswith("del_"):
+    if data.startswith("del_"):
         cb = data[4:]
         delete_menu(cb)
-        await query.message.reply_text(f"✅ منو `{cb}` و همه زیرمنوهایش حذف شدند.", parse_mode="Markdown")
+        await query.message.reply_text(f"✅ منو حذف شد.")
+        return
 
-# ===== دریافت متن از کاربر =====
+# دریافت متن از کاربر
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_admin(user_id):
@@ -211,7 +205,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     step = context.user_data.get("step")
     text = update.message.text.strip()
     
-    # ===== ساخت منو =====
+    # ساخت منو
     if step == "menu_title":
         context.user_data["menu_title"] = text
         context.user_data["step"] = "menu_callback"
@@ -225,7 +219,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ منو ساخته شد.")
         return
     
-    # ===== ساخت زیرمنو =====
+    # ساخت زیرمنو
     if step == "submenu_title":
         context.user_data["submenu_title"] = text
         context.user_data["step"] = "submenu_callback"
@@ -235,20 +229,18 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if step == "submenu_callback":
         title = context.user_data.get("submenu_title")
         parent_key = context.user_data.get("parent_key")
-        
         parent_menu = get_menu(parent_key)
         if not parent_menu:
             await update.message.reply_text("❌ منوی والد پیدا نشد.")
             context.user_data.clear()
             return
-        
         parent_id = parent_menu[0]
         add_menu(title, text, parent_id)
         context.user_data.clear()
         await update.message.reply_text("✅ زیرمنو ساخته شد.")
         return
     
-    # ===== اتصال فایل =====
+    # اتصال فایل
     if step == "file_menu":
         menu = get_menu(text)
         if not menu:
@@ -256,12 +248,12 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["file_menu_id"] = menu[0]
         context.user_data["step"] = "file_wait"
-        await update.message.reply_text("📌 حالا پیام رو از کانال فوروارد کن:")
+        await update.message.reply_text("📌 پیام رو از کانال فوروارد کن:")
         return
     
     if step == "file_wait":
         if not update.message.forward_from_chat:
-            await update.message.reply_text("❌ لطفاً یک پیام فورواردی بفرست.")
+            await update.message.reply_text("❌ یه پیام فورواردی بفرست.")
             return
         menu_id = context.user_data.get("file_menu_id")
         channel_id = update.message.forward_from_chat.id
@@ -271,7 +263,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ فایل متصل شد.")
         return
     
-    # ===== تنظیم قیمت =====
+    # تنظیم قیمت
     if step == "set_price_menu":
         menu = get_menu(text)
         if not menu:
@@ -279,7 +271,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["price_menu_id"] = menu[0]
         context.user_data["step"] = "set_price_value"
-        await update.message.reply_text("💰 قیمت (تعداد Stars) رو وارد کن:\n(برای رایگان کردن عدد 0 رو بفرست)")
+        await update.message.reply_text("💰 قیمت (Stars) رو وارد کن:\n(0 = رایگان)")
         return
     
     if step == "set_price_value":
@@ -296,4 +288,5 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if price == 0:
             await update.message.reply_text("✅ منو رایگان شد.")
         else:
-            await update.message.reply_text(f"✅ قیمت {price} Stars تنظیم شد.")
+            await update.message.reply_text(f"✅ قیمت {price} Stars شد.")
+        return
