@@ -115,7 +115,7 @@ def get_children(parent_id):
     db = get_db()
     c = db.cursor()
     c.execute("SELECT title, callback_key FROM menus WHERE parent_id=?", (parent_id,))
-   result = c.fetchall()
+    result = c.fetchall()
     db.close()
     return result
 
