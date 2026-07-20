@@ -99,25 +99,33 @@ def get_menu(callback_key):
     db = get_db()
     c = db.cursor()
     c.execute("SELECT id, title, is_paid, parent_id, price FROM menus WHERE callback_key=?", (callback_key,))
-    return c.fetchone()
+    result = c.fetchone()
+    db.close()
+    return result
 
 def get_root_menus():
     db = get_db()
     c = db.cursor()
     c.execute("SELECT title, callback_key FROM menus WHERE parent_id IS NULL")
-    return c.fetchall()
+    result = c.fetchall()
+    db.close()
+    return result
 
 def get_children(parent_id):
     db = get_db()
     c = db.cursor()
     c.execute("SELECT title, callback_key FROM menus WHERE parent_id=?", (parent_id,))
-    return c.fetchall()
+   result = c.fetchall()
+    db.close()
+    return result
 
 def get_all_menus():
     db = get_db()
     c = db.cursor()
     c.execute("SELECT title, callback_key, parent_id FROM menus")
-    return c.fetchall()
+    result = c.fetchall()
+    db.close()
+    return result
 
 def delete_menu(callback_key):
     db = get_db()

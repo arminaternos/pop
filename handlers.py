@@ -6,7 +6,16 @@ from config import DELETE_TIME
 from database import *
 
 logger = logging.getLogger(__name__)
+async def delete_message_job(context):
+    job = context.job
 
+    try:
+        await context.bot.delete_message(
+            chat_id=job.data["chat_id"],
+            message_id=job.data["message_id"]
+        )
+    except Exception:
+        pass
 def extract_ids_from_link(link):
     """استخراج channel_id و message_id از لینک تلگرام"""
     pattern = r'https?://t\.me/c/(\d+)/(\d+)'
@@ -98,9 +107,12 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 message_id=message_id
             )
             context.job_queue.run_once(
-                lambda ctx, chat=sent.chat.id, msg=sent.message_id:
-                    ctx.bot.delete_message(chat_id=chat, message_id=msg),
-                DELETE_TIME
+                delete_message_job,
+                DELETE_TIME,
+                data={
+                    "chat_id": sent.chat.id,
+                    "message_id": sent.message_id
+                }
             )
         except Exception as e:
             logger.exception(e)
@@ -239,8 +251,12 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                     message_id=message_id
                 )
                 context.job_queue.run_once(
-                    lambda ctx: ctx.bot.delete_message(chat_id=sent.chat.id, message_id=sent.message_id),
-                    DELETE_TIME
+                    delete_message_job,
+                    DELETE_TIME,
+                    data={
+                        "chat_id": sent.chat.id,
+                        "message_id": sent.message_id
+                    }
                 )
 
 async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
