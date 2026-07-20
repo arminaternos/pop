@@ -184,5 +184,14 @@ def set_payment_success(user_id, menu_id):
 def is_paid(user_id, menu_id):
     db = get_db()
     c = db.cursor()
-    c.execute("SELECT 1 FROM payments WHERE user_id=? AND menu_id=? AND status='paid'", (user_id, menu_id))
-    return c.fetchone() is not None
+
+    c.execute(
+        "SELECT 1 FROM payments WHERE user_id=? AND menu_id=? AND status='paid'",
+        (user_id, menu_id)
+    )
+
+    result = c.fetchone()
+
+    db.close()
+
+    return result is not None
