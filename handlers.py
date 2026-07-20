@@ -111,7 +111,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 delete_message_job,
                 DELETE_TIME,
                 data={
-                    "chat_id": sent.chat.id,
+                    "chat_id": update.effective_chat.id,
                     "message_id": sent.message_id
                 }
             )
@@ -256,7 +256,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                     delete_message_job,
                     DELETE_TIME,
                     data={
-                        "chat_id": sent.chat.id,
+                        "chat_id": update.effective_chat.id,
                         "message_id": sent.message_id
                     }
                 )
