@@ -14,8 +14,8 @@ async def delete_message_job(context):
             chat_id=job.data["chat_id"],
             message_id=job.data["message_id"]
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.exception(e)
 def extract_ids_from_link(link):
     """استخراج channel_id و message_id از لینک تلگرام"""
     pattern = r'https?://t\.me/c/(\d+)/(\d+)'
@@ -106,6 +106,7 @@ async def main_callback_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 from_chat_id=channel_id,
                 message_id=message_id
             )
+            print("JOB QUEUE =", context.job_queue)
             context.job_queue.run_once(
                 delete_message_job,
                 DELETE_TIME,
@@ -250,6 +251,7 @@ async def successful_payment_handler(update: Update, context: ContextTypes.DEFAU
                     from_chat_id=channel_id,
                     message_id=message_id
                 )
+                print("JOB QUEUE =", context.job_queue)
                 context.job_queue.run_once(
                     delete_message_job,
                     DELETE_TIME,
