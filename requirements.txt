@@ -1,3 +1,4 @@
-git add .
-git commit -m "توضیح تغییرات"
-git push
+python-telegram-bot==22.8
+APScheduler
+python-dotenv
+requests
